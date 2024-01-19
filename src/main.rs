@@ -2,6 +2,11 @@ use std::{fs, env, io::{Read, BufRead, Write}};
 
 const MEMORY_SIZE: usize = 30000;
 
+enum LoopOp {
+    Open,
+    Close
+}
+
 #[derive(Debug)]
 struct BrainfuckMachine {
     program: Vec<u8>,
@@ -35,8 +40,8 @@ impl BrainfuckMachine {
                 b'-' => { self.memory[self.data_pointer] = self.memory[self.data_pointer].wrapping_sub(1) },
                 b'.' => self.output(),
                 b',' => self.input(),
-                b'[' => self.handle_loop_open(),
-                b']' => self.handle_loop_close(),
+                b'[' => self.handle_loop(&LoopOp::Open),
+                b']' => self.handle_loop(&LoopOp::Close),
                 _ =>    {}
             }
             self.instruction_pointer += 1;
@@ -56,24 +61,49 @@ impl BrainfuckMachine {
         self.memory[self.data_pointer] = buf[0];
     }
 
-    fn handle_loop_open(&mut self) {
+    fn handle_loop(&mut self, operation: &LoopOp) {
+        let params = match operation {
+            LoopOp::Open => {   (b']', 
+                                b'[', 
+                                u8::eq as fn(&u8, &u8) -> bool,
+                                usize::wrapping_add as fn(usize, usize) -> usize)
+                            },
+            LoopOp::Close => {      (b'[', 
+                                    b']', 
+                                    u8::ne as fn(&u8, &u8) -> bool,
+                                    usize::wrapping_sub as fn(usize, usize) -> usize)
+            }
+        };
+
+        if params.2(&self.memory[self.data_pointer], &0) {
+            while self.program[self.instruction_pointer] != params.0 {
+                self.instruction_pointer = params.3(self.instruction_pointer, 1);
+                if self.program[self.instruction_pointer] == params.1 {
+                    self.handle_loop(operation);
+                    self.instruction_pointer = params.3(self.instruction_pointer, 1);
+                }
+            }
+        }
+    }
+
+    fn _handle_loop_open(&mut self) {
         if self.memory[self.data_pointer] == 0 {
             while self.program[self.instruction_pointer] != b']' {
                 self.instruction_pointer += 1;
                 if self.program[self.instruction_pointer] == b'[' {
-                    self.handle_loop_open();
+                    self._handle_loop_open();
                     self.instruction_pointer += 1;
                 }
             }
         }
     }
 
-    fn handle_loop_close(&mut self) {
+    fn _handle_loop_close(&mut self) {
         if self.memory[self.data_pointer] != 0 {
             while self.program[self.instruction_pointer] != b'[' {
                 self.instruction_pointer -= 1;
                 if self.program[self.instruction_pointer] == b']' {
-                    self.handle_loop_close();
+                    self._handle_loop_close();
                     self.instruction_pointer -= 1;
                 }
             }
